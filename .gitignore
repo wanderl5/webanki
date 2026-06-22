@@ -1,0 +1,23 @@
+# Environment
+.env
+.env.local
+
+# Data & media
+data/
+media/
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# Session artifacts
+session_*.zip
+
+# OS
+.DS_Store
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
