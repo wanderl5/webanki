@@ -1,10 +1,46 @@
 import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import { X } from 'lucide-react'
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderMath(text: string): string {
+  // Display math: $$...$$
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    try {
+      return katex.renderToString(math.trim(), { throwOnError: false, displayMode: true })
+    } catch {
+      return escapeHtml(math)
+    }
+  })
+
+  // Inline math: $...$
+  text = text.replace(/\$([^\s$][^$]*?)\$/g, (match, math) => {
+    // Skip already replaced display math spans
+    if (match.startsWith('$$')) return match
+    try {
+      return katex.renderToString(math.trim(), { throwOnError: false, displayMode: false })
+    } catch {
+      return escapeHtml(math)
+    }
+  })
+
+  return text
+}
+
 function renderMarkdown(text: string): string {
-  return DOMPurify.sanitize(marked.parse(text, { async: false }) as string)
+  const html = marked.parse(text, { async: false }) as string
+  return DOMPurify.sanitize(html)
 }
 
 interface MarkdownRendererProps {
@@ -41,12 +77,14 @@ export default function MarkdownRenderer({ text, className = '' }: MarkdownRende
     return () => document.removeEventListener('keydown', handleKey)
   }, [lightboxSrc])
 
+  const html = renderMarkdown(renderMath(text))
+
   return (
     <>
       <div
         ref={containerRef}
         className={`prose prose-sm max-w-none break-words prose-img:cursor-pointer prose-img:max-w-full prose-img:h-auto ${className}`}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
 
       {lightboxSrc && (
