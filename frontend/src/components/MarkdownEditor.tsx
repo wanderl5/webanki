@@ -5,9 +5,9 @@ import MarkdownRenderer from './MarkdownRenderer'
 
 function convertPlainFractions(text: string): string {
   // Convert mixed numbers: N a/b -> $N\frac{a}{b}$
-  text = text.replace(/(\d+)\s+(\d+)\/(\d+)(?![\d\/])/g, '$1\\frac{$2}{$3}')
+  text = text.replace(/(\d+)\s+(\d+)\/(\d+)(?![\d\/])/g, '$$$1\\frac{$2}{$3}$$')
   // Convert simple fractions: a/b -> $\frac{a}{b}$
-  text = text.replace(/(\d+)\/(\d+)(?![\d\/])/g, '\\frac{$1}{$2}')
+  text = text.replace(/(\d+)\/(\d+)(?![\d\/])/g, '$$\\frac{$1}{$2}$$')
   return text
 }
 
@@ -125,10 +125,11 @@ export default function MarkdownEditor({
           <button
             type="button"
             onClick={convertFractions}
-            className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
             title="Auto-convert a/b to LaTeX"
           >
-            1/2 → $\frac{1}{2}$
+            <Plus className="w-3.5 h-3.5" />
+            Convert fractions
           </button>
           <button
             type="button"
