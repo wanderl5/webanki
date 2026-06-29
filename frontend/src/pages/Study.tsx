@@ -79,6 +79,17 @@ export default function Study() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (completed || filteredQueue.length === 0) return
+
+      // Space toggles answer; ignore if typing in an input/textarea
+      if (
+        e.key === ' ' &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)
+      ) {
+        e.preventDefault()
+        setShowBack((prev) => !prev)
+        return
+      }
+
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
         setCurrentIndex((i) => Math.max(0, i - 1))
