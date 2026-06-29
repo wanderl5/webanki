@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight, Pencil, Link2 } from 'lucide-react'
 import { api, type StudyQueueItem, type ReviewResponse, type Card } from '../lib/api'
@@ -39,11 +39,13 @@ export default function Study() {
   const [showLinkedPanel, setShowLinkedPanel] = useState(false)
   const [selectedLinkedId, setSelectedLinkedId] = useState<string | null>(null)
 
-  const filteredQueue = queue.filter((item) => {
-    const lower = keyword.toLowerCase()
-    const text = `${item.front}\n${item.back}\n${item.tags?.join(' ') ?? ''}`.toLowerCase()
-    return text.includes(lower)
-  })
+  const filteredQueue = useMemo(() => {
+    return queue.filter((item) => {
+      const lower = keyword.toLowerCase()
+      const text = `${item.front}\n${item.back}\n${item.tags?.join(' ') ?? ''}`.toLowerCase()
+      return text.includes(lower)
+    })
+  }, [queue, keyword])
 
   useEffect(() => {
     const card = filteredQueue[currentIndex]
