@@ -5,6 +5,43 @@ import { api, type StudyQueueItem, type ReviewResponse, type Card } from '../lib
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MediaRenderer from '../components/MediaRenderer'
 
+function getMasteryLevel(card: StudyQueueItem): { level: string; color: string } {
+  if (card.state === 'New' || card.reps === 0) {
+    return { level: 'Unlearned', color: 'bg-slate-100 text-slate-600' }
+  }
+
+  const lapseRatio = card.reps > 0 ? card.lapses / card.reps : 0
+
+  if (
+    card.state === 'Relearning' ||
+    card.difficulty >= 7.5 ||
+    lapseRatio > 0.35 ||
+    card.lapses >= 3
+  ) {
+    return { level: 'Weak', color: 'bg-red-100 text-red-700' }
+  }
+
+  if (
+    card.reps >= 5 &&
+    lapseRatio <= 0.1 &&
+    card.difficulty < 4.5 &&
+    card.stability >= 30 &&
+    card.state === 'Review'
+  ) {
+    return { level: 'Mastered', color: 'bg-emerald-100 text-emerald-700' }
+  }
+
+  if (
+    card.state === 'Learning' ||
+    card.difficulty >= 5.5 ||
+    lapseRatio > 0.15
+  ) {
+    return { level: 'Consolidating', color: 'bg-amber-100 text-amber-700' }
+  }
+
+  return { level: 'Familiar', color: 'bg-blue-100 text-blue-700' }
+}
+
 type Rating = 'Again' | 'Hard' | 'Good' | 'Easy'
 
 const ratingConfig: Record<
@@ -311,6 +348,38 @@ export default function Study() {
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[260px] flex flex-col">
+        <div className="px-6 pt-4">
+          {(() => {
+            const mastery = getMasteryLevel(card)
+            return (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span
+                  className="font-mono text-slate-400 cursor-pointer hover:text-indigo-600"
+                  title="Double-click to edit card"
+                  onDoubleClick={() => navigate(`/cards/${card.id}/edit`)}
+                >
+                  {card.id.slice(0, 8)}
+                </span>
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                  {card.state}
+                </span>
+                <span className={`px-2 py-0.5 rounded-full ${mastery.color}`}>
+                  {mastery.level}
+                </span>
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full"
+                  title={`Difficulty ${card.difficulty.toFixed(1)} · Stability ${card.stability.toFixed(1)}d`}
+                >
+                  D {card.difficulty.toFixed(1)} · S {card.stability.toFixed(0)}
+                </span>
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full"
+                  title={`Reviews ${card.reps} · Lapses ${card.lapses}`}
+                >
+                  R {card.reps} · L {card.lapses}
+                </span>
+              </div>
+            )
+          })()}
+        </div>
         <div className="flex-1 p-8 flex items-center justify-center">
           <div className="text-center w-full">
             <p className="text-sm text-slate-400 mb-4 uppercase tracking-wide">Front</p>
