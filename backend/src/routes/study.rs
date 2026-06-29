@@ -1,6 +1,6 @@
 use crate::{
     error::{AppError, AppResult},
-    models::{Card, CardResponse, Rating, ReviewRequest, ReviewResponse, StudyQueueItem},
+    models::{Card, CardResponse, Deck, Rating, ReviewRequest, ReviewResponse, StudyQueueItem},
     routes::auth::CurrentUser,
     state::AppState,
 };
@@ -27,6 +27,16 @@ struct QueueQuery {
     limit: Option<i64>,
     #[serde(default)]
     deck_id: Option<String>,
+    #[serde(default)]
+    include_subdecks: bool,
+    #[serde(default)]
+    state: Vec<String>,
+    #[serde(default)]
+    mastery: Vec<String>,
+    #[serde(default)]
+    managed: Vec<bool>,
+    #[serde(default)]
+    search: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +94,47 @@ async fn review_plan(
     Ok(Json(items))
 }
 
+fn mastery_level(card: &Card) -> &'static str {
+    if card.state == "New" || card.reps == 0 {
+        return "Unlearned";
+    }
+    let lapse_ratio = if card.reps > 0 {
+        card.lapses as f64 / card.reps as f64
+    } else {
+        0.0
+    };
+    if card.state == "Relearning" || card.difficulty >= 7.5 || lapse_ratio > 0.35 || card.lapses >= 3
+    {
+        return "Weak";
+    }
+    if card.reps >= 5
+        && lapse_ratio <= 0.1
+        && card.difficulty < 4.5
+        && card.stability >= 30.0
+        && card.state == "Review"
+    {
+        return "Mastered";
+    }
+    if card.state == "Learning" || card.difficulty >= 5.5 || lapse_ratio > 0.15 {
+        return "Consolidating";
+    }
+    "Familiar"
+}
+
+fn collect_descendant_deck_ids(deck_id: &str, decks: &[Deck]) -> Vec<String> {
+    let mut result = vec![deck_id.to_string()];
+    let mut queue = vec![deck_id.to_string()];
+    while let Some(current) = queue.pop() {
+        for d in decks {
+            if d.parent_id.as_ref() == Some(&current) && !result.contains(&d.id) {
+                result.push(d.id.clone());
+                queue.push(d.id.clone());
+            }
+        }
+    }
+    result
+}
+
 async fn study_queue(
     State(state): State<AppState>,
     CurrentUser { id }: CurrentUser,
@@ -92,27 +143,71 @@ async fn study_queue(
     let limit = query.limit.unwrap_or(50).clamp(1, 500);
     let now = Utc::now().naive_utc();
 
-    let cards = if let Some(deck_id) = &query.deck_id {
-        sqlx::query_as::<_, Card>(
-            "SELECT * FROM cards WHERE user_id = ? AND deck_id = ? AND managed = 1 ORDER BY due ASC LIMIT ?",
-        )
-        .bind(&id)
-        .bind(deck_id)
-        .bind(limit)
-        .fetch_all(&state.pool)
-        .await?
+    let deck_ids: Option<Vec<String>> = if let Some(deck_id) = &query.deck_id {
+        if query.include_subdecks {
+            let decks = sqlx::query_as::<_, Deck>("SELECT * FROM decks WHERE user_id = ?")
+                .bind(&id)
+                .fetch_all(&state.pool)
+                .await?;
+            Some(collect_descendant_deck_ids(deck_id, &decks))
+        } else {
+            Some(vec![deck_id.clone()])
+        }
     } else {
-        sqlx::query_as::<_, Card>(
-            "SELECT * FROM cards WHERE user_id = ? AND managed = 1 ORDER BY due ASC LIMIT ?",
-        )
-        .bind(&id)
-        .bind(limit)
-        .fetch_all(&state.pool)
-        .await?
+        None
     };
+
+    let mut cards: Vec<Card> = if let Some(deck_ids) = &deck_ids {
+        if deck_ids.len() == 1 {
+            sqlx::query_as::<_, Card>(
+                "SELECT * FROM cards WHERE user_id = ? AND deck_id = ? ORDER BY due ASC",
+            )
+            .bind(&id)
+            .bind(&deck_ids[0])
+            .fetch_all(&state.pool)
+            .await?
+        } else {
+            let placeholders = deck_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT * FROM cards WHERE user_id = ? AND deck_id IN ({}) ORDER BY due ASC",
+                placeholders
+            );
+            let mut q = sqlx::query_as::<_, Card>(&sql);
+            q = q.bind(&id);
+            for deck_id in deck_ids {
+                q = q.bind(deck_id);
+            }
+            q.fetch_all(&state.pool).await?
+        }
+    } else {
+        sqlx::query_as::<_, Card>("SELECT * FROM cards WHERE user_id = ? ORDER BY due ASC")
+            .bind(&id)
+            .fetch_all(&state.pool)
+            .await?
+    };
+
+    // Apply filters in Rust
+    if !query.managed.is_empty() {
+        cards.retain(|c| query.managed.iter().any(|&m| m == c.managed));
+    }
+    if !query.state.is_empty() {
+        cards.retain(|c| query.state.iter().any(|s| s == &c.state));
+    }
+    if !query.mastery.is_empty() {
+        cards.retain(|c| query.mastery.iter().any(|m| m == mastery_level(c)));
+    }
+    if let Some(search) = query.search {
+        let lower = search.to_lowercase();
+        cards.retain(|c| {
+            c.front.to_lowercase().contains(&lower)
+                || c.back.to_lowercase().contains(&lower)
+                || c.tags.to_lowercase().contains(&lower)
+        });
+    }
 
     let mut items: Vec<StudyQueueItem> = cards
         .iter()
+        .take(limit as usize)
         .map(|card| {
             let retrievability = compute_retrievability(&state, card, now);
             StudyQueueItem {

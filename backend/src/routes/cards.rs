@@ -9,13 +9,14 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use std::collections::{HashMap, HashSet};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", post(create_card))
         .route("/:id", get(get_card).put(update_card).delete(delete_card))
+        .route("/:id/reset", post(reset_card))
 }
 
 pub async fn load_card_links(
@@ -243,4 +244,39 @@ async fn delete_card(
         return Err(AppError::NotFound("card not found".into()));
     }
     Ok(Json(serde_json::json!({"deleted": true})))
+}
+
+async fn reset_card(
+    State(state): State<AppState>,
+    CurrentUser { id }: CurrentUser,
+    Path(card_id): Path<String>,
+) -> AppResult<Json<CardResponse>> {
+    let now = Utc::now().naive_utc();
+    let card = sqlx::query_as::<_, Card>(
+        "UPDATE cards SET
+            state = ?, due = ?, stability = ?, difficulty = ?,
+            elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?,
+            last_review = ?, updated_at = ?
+        WHERE id = ? AND user_id = ? RETURNING *",
+    )
+    .bind("New")
+    .bind(now)
+    .bind(0.0)
+    .bind(0.0)
+    .bind(0i64)
+    .bind(0i64)
+    .bind(0i64)
+    .bind(0i64)
+    .bind(None::<NaiveDateTime>)
+    .bind(now)
+    .bind(&card_id)
+    .bind(&id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("card not found".into()))?;
+
+    let mut resp = CardResponse::from(&card);
+    let links = load_card_links(&state, &[card_id]).await?;
+    resp.linked_card_ids = links.get(&resp.id).cloned().unwrap_or_default();
+    Ok(Json(resp))
 }

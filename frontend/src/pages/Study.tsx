@@ -20,6 +20,11 @@ const ratingConfig: Record<
 export default function Study() {
   const [searchParams] = useSearchParams()
   const deckId = searchParams.get('deckId')
+  const includeSubdecks = searchParams.get('include_subdecks') !== 'false'
+  const managed = searchParams.getAll('managed')
+  const state = searchParams.getAll('state')
+  const mastery = searchParams.getAll('mastery')
+  const search = searchParams.get('search') || ''
 
   const [queue, setQueue] = useState<StudyQueueItem[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -32,7 +37,16 @@ export default function Study() {
   async function fetchQueue() {
     setLoading(true)
     try {
-      const query = deckId ? `?deck_id=${deckId}` : ''
+      const params = new URLSearchParams()
+      if (deckId) {
+        params.set('deck_id', deckId)
+        params.set('include_subdecks', String(includeSubdecks))
+      }
+      managed.forEach((v) => params.append('managed', v))
+      state.forEach((v) => params.append('state', v))
+      mastery.forEach((v) => params.append('mastery', v))
+      if (search.trim()) params.set('search', search.trim())
+      const query = params.toString() ? `?${params.toString()}` : ''
       const data = await api.get<StudyQueueItem[]>(`/study/queue${query}`)
       setQueue(data)
       setCurrentIndex(0)
@@ -47,7 +61,7 @@ export default function Study() {
 
   useEffect(() => {
     fetchQueue()
-  }, [deckId])
+  }, [deckId, includeSubdecks, managed.join(','), state.join(','), mastery.join(','), search])
 
   async function handleRate(rating: Rating) {
     const card = queue[currentIndex]
@@ -69,16 +83,16 @@ export default function Study() {
   if (loading) return <div className="text-center py-12 text-slate-500">Loading…</div>
 
   if (completed) {
-    const emptyDeck = lastInterval === null && deckId
+    const noMatchingCards = queue.length === 0
     return (
       <div className="max-w-xl mx-auto text-center py-16 bg-white rounded-xl border border-slate-200">
         <CheckCircle2 className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
         <h2 className="text-2xl font-semibold mb-2">
-          {emptyDeck ? 'No cards in this deck' : 'All caught up!'}
+          {noMatchingCards ? 'No cards to study' : 'All caught up!'}
         </h2>
         <p className="text-slate-600 mb-6">
-          {emptyDeck
-            ? 'Add some cards before studying this deck.'
+          {noMatchingCards
+            ? 'No cards match the current study scope or filters.'
             : lastInterval !== null
               ? `Next review scheduled in ${lastInterval} day${lastInterval === 1 ? '' : 's'}.`
               : 'No cards due for review right now.'}

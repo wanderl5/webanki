@@ -63,6 +63,22 @@ function getDescendantIds(deckId: string, decks: Deck[]): string[] {
   return result
 }
 
+function getTotalCardCount(deckId: string, decks: Deck[]): number {
+  const deck = decks.find((d) => d.id === deckId)
+  if (!deck) return 0
+  let total = deck.card_count ?? 0
+  decks
+    .filter((d) => d.parent_id === deckId)
+    .forEach((child) => {
+      total += getTotalCardCount(child.id, decks)
+    })
+  return total
+}
+
+function getChildDeckCount(deckId: string, decks: Deck[]): number {
+  return decks.filter((d) => d.parent_id === deckId).length
+}
+
 export default function Decks() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [search, setSearch] = useState('')
@@ -272,49 +288,54 @@ export default function Decks() {
 function GridView({ decks, onDelete, onEdit }: { decks: Deck[]; onDelete: (id: string, name: string) => void; onEdit: (deck: Deck) => void }) {
   return (
     <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {decks.map((deck) => (
-        <li key={deck.id}>
-          <div className="group relative h-full p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-colors">
-            <Link to={`/decks/${deck.id}`} className="block">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <FolderOpen className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-                  <span className="font-medium text-slate-800 truncate">{deck.name}</span>
+      {decks.map((deck) => {
+        const totalCards = getTotalCardCount(deck.id, decks)
+        const subDeckCount = getChildDeckCount(deck.id, decks)
+        return (
+          <li key={deck.id}>
+            <div className="group relative h-full p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-colors">
+              <Link to={`/decks/${deck.id}`} className="block">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FolderOpen className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                    <span className="font-medium text-slate-800 truncate">{deck.name}</span>
+                  </div>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full flex-shrink-0">
+                    {subDeckCount > 0 ? `${subDeckCount} sub-deck${subDeckCount === 1 ? '' : 's'} · ` : ''}
+                    {totalCards} card{totalCards === 1 ? '' : 's'}
+                  </span>
                 </div>
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full flex-shrink-0">
-                  {deck.card_count ?? 0} card{(deck.card_count ?? 0) === 1 ? '' : 's'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">
-                Created {new Date(deck.created_at).toLocaleDateString()}
-              </p>
-            </Link>
-            <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => onEdit(deck)}
-                className="p-1.5 bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-md border border-slate-200"
-                title="Edit"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <Link
-                to={`/study?deckId=${deck.id}`}
-                className="p-1.5 bg-indigo-600 text-white rounded-md"
-                title="Study"
-              >
-                <Brain className="w-3.5 h-3.5" />
+                <p className="text-xs text-slate-400 mt-2">
+                  Created {new Date(deck.created_at).toLocaleDateString()}
+                </p>
               </Link>
-              <button
-                onClick={() => onDelete(deck.id, deck.name)}
-                className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md"
-                title="Delete"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => onEdit(deck)}
+                  className="p-1.5 bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-md border border-slate-200"
+                  title="Edit"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <Link
+                  to={`/study?deckId=${deck.id}`}
+                  className="p-1.5 bg-indigo-600 text-white rounded-md"
+                  title="Study"
+                >
+                  <Brain className="w-3.5 h-3.5" />
+                </Link>
+                <button
+                  onClick={() => onDelete(deck.id, deck.name)}
+                  className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md"
+                  title="Delete"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -394,6 +415,7 @@ function TreeNodeRow({
   const moveCandidates = decks.filter(
     (d) => d.id !== deck.id && !excludeIds.includes(d.id)
   )
+  const totalCards = useMemo(() => getTotalCardCount(deck.id, decks), [deck.id, decks])
 
   return (
     <li>
@@ -424,7 +446,8 @@ function TreeNodeRow({
           )}
           <span className="font-medium truncate">{deck.name}</span>
           <span className="text-xs text-slate-400 flex-shrink-0">
-            {deck.card_count ?? 0} card{(deck.card_count ?? 0) === 1 ? '' : 's'}
+            {hasChildren ? `${children.length} sub-deck${children.length === 1 ? '' : 's'} · ` : ''}
+            {totalCards} card{totalCards === 1 ? '' : 's'}
           </span>
         </Link>
 
@@ -447,7 +470,7 @@ function TreeNodeRow({
           <Link
             to={`/study?deckId=${deck.id}`}
             className={`p-1.5 rounded-md transition-colors ${
-              (deck.card_count ?? 0) > 0
+              totalCards > 0
                 ? 'text-indigo-600 hover:bg-indigo-50'
                 : 'text-slate-300 cursor-not-allowed pointer-events-none'
             }`}

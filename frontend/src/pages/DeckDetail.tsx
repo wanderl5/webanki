@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Pencil, Trash2, Plus, ArrowLeft, Brain, Download, FolderOpen } from 'lucide-react'
+import { Pencil, Trash2, Plus, ArrowLeft, Brain, Download, FolderOpen, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { api, exportApkg, type Deck, type Card } from '../lib/api'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import EditDeckModal from '../components/EditDeckModal'
@@ -16,6 +16,57 @@ function buildBreadcrumb(deckId: string, decks: Deck[]): Deck[] {
   return path
 }
 
+function getTotalCardCount(deckId: string, decks: Deck[]): number {
+  const deck = decks.find((d) => d.id === deckId)
+  if (!deck) return 0
+  let total = deck.card_count ?? 0
+  decks
+    .filter((d) => d.parent_id === deckId)
+    .forEach((child) => {
+      total += getTotalCardCount(child.id, decks)
+    })
+  return total
+}
+
+export type MasteryLevel = 'Unlearned' | 'Weak' | 'Consolidating' | 'Familiar' | 'Mastered'
+
+function getMasteryLevel(card: Card): { level: MasteryLevel; color: string } {
+  if (card.state === 'New' || card.reps === 0) {
+    return { level: 'Unlearned', color: 'bg-slate-100 text-slate-600' }
+  }
+
+  const lapseRatio = card.reps > 0 ? card.lapses / card.reps : 0
+
+  if (
+    card.state === 'Relearning' ||
+    card.difficulty >= 7.5 ||
+    lapseRatio > 0.35 ||
+    card.lapses >= 3
+  ) {
+    return { level: 'Weak', color: 'bg-red-100 text-red-700' }
+  }
+
+  if (
+    card.reps >= 5 &&
+    lapseRatio <= 0.1 &&
+    card.difficulty < 4.5 &&
+    card.stability >= 30 &&
+    card.state === 'Review'
+  ) {
+    return { level: 'Mastered', color: 'bg-emerald-100 text-emerald-700' }
+  }
+
+  if (
+    card.state === 'Learning' ||
+    card.difficulty >= 5.5 ||
+    lapseRatio > 0.15
+  ) {
+    return { level: 'Consolidating', color: 'bg-amber-100 text-amber-700' }
+  }
+
+  return { level: 'Familiar', color: 'bg-blue-100 text-blue-700' }
+}
+
 export default function DeckDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -25,7 +76,10 @@ export default function DeckDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [managedFilter, setManagedFilter] = useState<boolean | null>(null)
+  const [managedFilter, setManagedFilter] = useState<boolean[]>([true])
+  const [stateFilter, setStateFilter] = useState<string[]>([])
+  const [masteryFilter, setMasteryFilter] = useState<MasteryLevel[]>([])
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [addingSub, setAddingSub] = useState(false)
   const [subName, setSubName] = useState('')
@@ -35,7 +89,10 @@ export default function DeckDetail() {
     if (!id) return
     setLoading(true)
     try {
-      const params = managedFilter !== null ? `?managed=${managedFilter}` : ''
+      let params = ''
+      if (managedFilter.length === 1) {
+        params = `?managed=${managedFilter[0]}`
+      }
       const [deckData, decksData, cardsData] = await Promise.all([
         api.get<Deck>(`/decks/${id}`),
         api.get<Deck[]>('/decks'),
@@ -109,12 +166,20 @@ export default function DeckDetail() {
     }
   }
 
-  const filteredCards = cards.filter(
-    (c) =>
+  const filteredCards = cards.filter((c) => {
+    const matchesSearch =
       c.front.toLowerCase().includes(search.toLowerCase()) ||
       c.back.toLowerCase().includes(search.toLowerCase()) ||
       c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
-  )
+    const matchesManaged =
+      managedFilter.length === 0 || managedFilter.includes(c.managed)
+    const matchesState =
+      stateFilter.length === 0 || stateFilter.includes(c.state)
+    const matchesMastery =
+      masteryFilter.length === 0 ||
+      masteryFilter.includes(getMasteryLevel(c).level)
+    return matchesSearch && matchesManaged && matchesState && matchesMastery
+  })
 
   if (loading) return <div className="text-center py-12 text-slate-500">Loading…</div>
   if (!deck) return <div className="text-center py-12 text-red-600">{error || 'Deck not found'}</div>
@@ -146,9 +211,19 @@ export default function DeckDetail() {
         <h1 className="text-2xl font-semibold">{deck.name}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to={cards.length > 0 ? `/study?deckId=${deck.id}` : '#'}
+            to={(() => {
+              if (!deck || cards.length === 0) return '#'
+              const params = new URLSearchParams()
+              params.set('deckId', deck.id)
+              params.set('include_subdecks', 'true')
+              managedFilter.forEach((v) => params.append('managed', String(v)))
+              stateFilter.forEach((v) => params.append('state', v))
+              masteryFilter.forEach((v) => params.append('mastery', v))
+              if (search.trim()) params.set('search', search.trim())
+              return `/study?${params.toString()}`
+            })()}
             onClick={(e) => {
-              if (cards.length === 0) {
+              if (!deck || cards.length === 0) {
                 e.preventDefault()
                 alert('Add some cards to this deck before studying.')
               }
@@ -241,7 +316,7 @@ export default function DeckDetail() {
               >
                 <FolderOpen className="w-4 h-4 text-indigo-600" />
                 <span className="text-sm font-medium text-slate-700">{sub.name}</span>
-                <span className="text-xs text-slate-400">{sub.card_count ?? 0} cards</span>
+                <span className="text-xs text-slate-400">{getTotalCardCount(sub.id, allDecks)} cards</span>
               </Link>
             ))}
           </div>
@@ -256,24 +331,153 @@ export default function DeckDetail() {
         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {[
-          { label: 'All', value: null },
-          { label: 'Managed', value: true },
-          { label: 'Unmanaged', value: false },
-        ].map((opt) => (
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            {!filtersExpanded && managedFilter.length === 0 && stateFilter.length === 0 && masteryFilter.length === 0 && (
+              <span className="text-sm text-slate-500">No filters</span>
+            )}
+            {!filtersExpanded && managedFilter.map((value) => (
+              <span
+                key={`managed-${value}`}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700"
+              >
+                {value ? 'Managed' : 'Unmanaged'}
+                <button
+                  onClick={() =>
+                    setManagedFilter((prev) => prev.filter((v) => v !== value))
+                  }
+                  className="hover:text-indigo-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {!filtersExpanded && stateFilter.map((value) => (
+              <span
+                key={`state-${value}`}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700"
+              >
+                {value}
+                <button
+                  onClick={() =>
+                    setStateFilter((prev) => prev.filter((v) => v !== value))
+                  }
+                  className="hover:text-indigo-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {!filtersExpanded && masteryFilter.map((value) => (
+              <span
+                key={`mastery-${value}`}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700"
+              >
+                {value}
+                <button
+                  onClick={() =>
+                    setMasteryFilter((prev) => prev.filter((v) => v !== value))
+                  }
+                  className="hover:text-indigo-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
           <button
-            key={opt.label}
-            onClick={() => setManagedFilter(opt.value as boolean | null)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-              managedFilter === opt.value
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-            }`}
+            onClick={() => setFiltersExpanded((prev) => !prev)}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors shrink-0"
           >
-            {opt.label}
+            Filters
+            {filtersExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
           </button>
-        ))}
+        </div>
+
+        {filtersExpanded && (
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+            {[
+              { label: 'Managed', value: true },
+              { label: 'Unmanaged', value: false },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() =>
+                  setManagedFilter((prev) =>
+                    prev.includes(opt.value)
+                      ? prev.filter((v) => v !== opt.value)
+                      : [...prev, opt.value]
+                  )
+                }
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                  managedFilter.includes(opt.value)
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <span className="w-px h-4 bg-slate-300 mx-1" />
+            {[
+              { label: 'New', value: 'New' },
+              { label: 'Learning', value: 'Learning' },
+              { label: 'Review', value: 'Review' },
+              { label: 'Relearning', value: 'Relearning' },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() =>
+                  setStateFilter((prev) =>
+                    prev.includes(opt.value)
+                      ? prev.filter((v) => v !== opt.value)
+                      : [...prev, opt.value]
+                  )
+                }
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                  stateFilter.includes(opt.value)
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <span className="w-px h-4 bg-slate-300 mx-1" />
+            {(
+              [
+                'Unlearned',
+                'Weak',
+                'Consolidating',
+                'Familiar',
+                'Mastered',
+              ] as MasteryLevel[]
+            ).map((value) => (
+              <button
+                key={value}
+                onClick={() =>
+                  setMasteryFilter((prev) =>
+                    prev.includes(value)
+                      ? prev.filter((v) => v !== value)
+                      : [...prev, value]
+                  )
+                }
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                  masteryFilter.includes(value)
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {filteredCards.length === 0 ? (
@@ -300,14 +504,24 @@ export default function DeckDetail() {
                     text={card.front}
                     className="line-clamp-2"
                   />
-                  <MarkdownRenderer
-                    text={card.back}
-                    className="text-slate-600 mt-1 text-sm line-clamp-3"
-                  />
                   <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                      {card.state}
+                    </span>
+                    {(() => {
+                      const mastery = getMasteryLevel(card)
+                      return (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${mastery.color}`}
+                          title={`Difficulty ${card.difficulty.toFixed(1)} · Stability ${card.stability.toFixed(1)}d · Reviews ${card.reps} · Lapses ${card.lapses}`}
+                        >
+                          {mastery.level}
+                        </span>
+                      )
+                    })()}
                     {!card.managed && (
                       <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
-                        Not managed
+                        Unmanaged
                       </span>
                     )}
                     {card.linked_card_ids.length > 0 && (

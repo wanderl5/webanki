@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, RotateCcw } from 'lucide-react'
 import { api, type Card } from '../lib/api'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MediaRenderer from '../components/MediaRenderer'
@@ -93,6 +93,20 @@ export default function CardView() {
     )
   }
 
+  async function handleReset() {
+    if (!mainCard) return
+    if (!confirm('Reset this card’s study progress? It will become a new card.')) return
+    try {
+      const updated = await api.post<Card>(`/cards/${mainCard.id}/reset`, {})
+      setMainCard(updated)
+      setPanes((prev) =>
+        prev.map((p, i) => (i === 0 ? { card: updated, showBack: false } : p))
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset card')
+    }
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.code === 'Space' && !e.repeat) {
@@ -127,10 +141,16 @@ export default function CardView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 text-sm text-slate-500">
+      <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
         <Link to={`/decks/${mainCard.deck_id}`} className="flex items-center gap-1 hover:text-indigo-600">
           <ArrowLeft className="w-4 h-4" /> Back
         </Link>
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-1 px-3 py-1.5 text-slate-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+        >
+          <RotateCcw className="w-4 h-4" /> Reset progress
+        </button>
       </div>
 
       {linkedCards.length > 0 && (
