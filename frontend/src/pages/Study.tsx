@@ -329,6 +329,44 @@ export default function Study() {
                 <MarkdownRenderer text={card.back} className="sm:prose-base prose-p:my-2" />
               </div>
               <MediaRenderer media={card.media} />
+
+              {linkedCards.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-slate-100 text-left">
+                  <p className="text-sm font-medium text-slate-700 mb-3">Linked cards</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {linkedCards.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() =>
+                          setSelectedLinkedId((prev) => (prev === c.id ? null : c.id))
+                        }
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors text-left max-w-xs truncate ${
+                          selectedLinkedId === c.id
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                        }`}
+                        title={c.front}
+                      >
+                        {c.front}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedLinkedCard && (
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-500">Preview</span>
+                        <Link
+                          to={`/cards/${selectedLinkedCard.id}`}
+                          className="text-xs text-indigo-600 hover:underline"
+                        >
+                          Open detail →
+                        </Link>
+                      </div>
+                      <MarkdownRenderer text={selectedLinkedCard.front} />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
