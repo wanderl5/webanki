@@ -376,6 +376,19 @@ export default function Study() {
                 >
                   R {card.reps} · L {card.lapses}
                 </span>
+                {linkedCards.length > 0 && (
+                  <button
+                    onClick={() => setShowLinkedPanel((v) => !v)}
+                    className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
+                      showLinkedPanel
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                    }`}
+                    title="Toggle linked cards panel"
+                  >
+                    {linkedCards.length} linked
+                  </button>
+                )}
               </div>
             )
           })()}
