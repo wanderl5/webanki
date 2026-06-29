@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
-import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import { api, type StudyQueueItem, type ReviewResponse } from '../lib/api'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MediaRenderer from '../components/MediaRenderer'
@@ -18,6 +18,7 @@ const ratingConfig: Record<
 }
 
 export default function Study() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const deckId = searchParams.get('deckId')
   const includeSubdecks = searchParams.get('include_subdecks') !== 'false'
@@ -181,6 +182,13 @@ export default function Study() {
             <ArrowLeft className="w-4 h-4" /> Back
           </Link>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(`/cards/${card.id}/edit`)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="Edit current card"
+            >
+              <Pencil className="w-4 h-4" /> Edit
+            </button>
             <button
               onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
               disabled={currentIndex === 0}
