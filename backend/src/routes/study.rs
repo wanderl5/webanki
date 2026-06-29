@@ -34,7 +34,7 @@ struct QueueQuery {
     #[serde(default)]
     mastery: Vec<String>,
     #[serde(default)]
-    managed: Vec<bool>,
+    managed: Vec<String>,
     #[serde(default)]
     search: Option<String>,
 }
@@ -187,8 +187,17 @@ async fn study_queue(
     };
 
     // Apply filters in Rust
-    if !query.managed.is_empty() {
-        cards.retain(|c| query.managed.iter().any(|&m| m == c.managed));
+    let managed_values: Vec<bool> = query
+        .managed
+        .iter()
+        .filter_map(|s| match s.as_str() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        })
+        .collect();
+    if !managed_values.is_empty() {
+        cards.retain(|c| managed_values.iter().any(|&m| m == c.managed));
     }
     if !query.state.is_empty() {
         cards.retain(|c| query.state.iter().any(|s| s == &c.state));

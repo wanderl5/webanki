@@ -318,7 +318,7 @@ function GridView({ decks, onDelete, onEdit }: { decks: Deck[]; onDelete: (id: s
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <Link
-                  to={`/study?deckId=${deck.id}`}
+                  to={`/study?deckId=${deck.id}&include_subdecks=true&managed=true`}
                   className="p-1.5 bg-indigo-600 text-white rounded-md"
                   title="Study"
                 >
@@ -468,7 +468,7 @@ function TreeNodeRow({
           </button>
 
           <Link
-            to={`/study?deckId=${deck.id}`}
+            to={`/study?deckId=${deck.id}&include_subdecks=true&managed=true`}
             className={`p-1.5 rounded-md transition-colors ${
               totalCards > 0
                 ? 'text-indigo-600 hover:bg-indigo-50'
