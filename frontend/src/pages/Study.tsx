@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
-import { api, type StudyQueueItem, type ReviewResponse } from '../lib/api'
+import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight, Pencil, Link2 } from 'lucide-react'
+import { api, type StudyQueueItem, type ReviewResponse, type Card } from '../lib/api'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MediaRenderer from '../components/MediaRenderer'
 
@@ -35,12 +35,32 @@ export default function Study() {
   const [completed, setCompleted] = useState(false)
   const [lastInterval, setLastInterval] = useState<number | null>(null)
   const [keyword, setKeyword] = useState('')
+  const [linkedCards, setLinkedCards] = useState<Card[]>([])
+  const [showLinkedPanel, setShowLinkedPanel] = useState(false)
+  const [selectedLinkedId, setSelectedLinkedId] = useState<string | null>(null)
 
   const filteredQueue = queue.filter((item) => {
     const lower = keyword.toLowerCase()
     const text = `${item.front}\n${item.back}\n${item.tags?.join(' ') ?? ''}`.toLowerCase()
     return text.includes(lower)
   })
+
+  useEffect(() => {
+    const card = filteredQueue[currentIndex]
+    if (!card) {
+      setLinkedCards([])
+      return
+    }
+    if (!card.linked_card_ids?.length) {
+      setLinkedCards([])
+      return
+    }
+    Promise.all(
+      card.linked_card_ids.map((id) => api.get<Card>(`/cards/${id}`).catch(() => null))
+    ).then((results) => {
+      setLinkedCards(results.filter((c): c is Card => c !== null))
+    })
+  }, [filteredQueue, currentIndex])
 
   async function fetchQueue() {
     setLoading(true)
@@ -75,6 +95,8 @@ export default function Study() {
     setCurrentIndex(0)
     setShowBack(false)
     setCompleted(false)
+    setShowLinkedPanel(false)
+    setSelectedLinkedId(null)
   }, [keyword])
 
   useEffect(() => {
@@ -95,10 +117,14 @@ export default function Study() {
         e.preventDefault()
         setCurrentIndex((i) => Math.max(0, i - 1))
         setShowBack(false)
+        setShowLinkedPanel(false)
+        setSelectedLinkedId(null)
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
         setCurrentIndex((i) => Math.min(filteredQueue.length - 1, i + 1))
         setShowBack(false)
+        setShowLinkedPanel(false)
+        setSelectedLinkedId(null)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -112,6 +138,8 @@ export default function Study() {
       const res = await api.post<ReviewResponse>(`/study/${card.id}/review`, { rating })
       setLastInterval(res.interval_days)
       setShowBack(false)
+      setShowLinkedPanel(false)
+      setSelectedLinkedId(null)
       if (currentIndex + 1 >= filteredQueue.length) {
         setCompleted(true)
       } else {
@@ -171,6 +199,8 @@ export default function Study() {
     )
   }
 
+  const selectedLinkedCard = linkedCards.find((c) => c.id === selectedLinkedId)
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex flex-col gap-4 mb-6">
@@ -182,6 +212,19 @@ export default function Study() {
             <ArrowLeft className="w-4 h-4" /> Back
           </Link>
           <div className="flex items-center gap-2">
+            {linkedCards.length > 0 && (
+              <button
+                onClick={() => setShowLinkedPanel((v) => !v)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  showLinkedPanel
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-indigo-600 hover:bg-indigo-50'
+                }`}
+                title="View linked cards"
+              >
+                <Link2 className="w-4 h-4" /> {linkedCards.length} linked
+              </button>
+            )}
             <button
               onClick={() => navigate(`/cards/${card.id}/edit`)}
               className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -288,6 +331,57 @@ export default function Study() {
           </div>
         )}
       </div>
+
+      {showLinkedPanel && linkedCards.length > 0 && (
+        <div className="mb-6 bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-slate-700">Linked cards</h3>
+            <button
+              onClick={() => {
+                setShowLinkedPanel(false)
+                setSelectedLinkedId(null)
+              }}
+              className="text-xs text-slate-500 hover:text-slate-700"
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {linkedCards.map((c) => (
+              <button
+                key={c.id}
+                onClick={() =>
+                  setSelectedLinkedId((prev) => (prev === c.id ? null : c.id))
+                }
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors text-left max-w-xs truncate ${
+                  selectedLinkedId === c.id
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+                title={c.front}
+              >
+                {c.front}
+              </button>
+            ))}
+          </div>
+          {selectedLinkedCard && (
+            <div className="border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-500">Preview</span>
+                <Link
+                  to={`/cards/${selectedLinkedCard.id}`}
+                  className="text-xs text-indigo-600 hover:underline"
+                >
+                  Open detail →
+                </Link>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-4">
+                <MarkdownRenderer text={selectedLinkedCard.front} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-6">
         {!showBack ? (
