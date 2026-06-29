@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { ArrowLeft, Eye, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Eye, CheckCircle2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, type StudyQueueItem, type ReviewResponse } from '../lib/api'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MediaRenderer from '../components/MediaRenderer'
@@ -33,6 +33,13 @@ export default function Study() {
   const [error, setError] = useState('')
   const [completed, setCompleted] = useState(false)
   const [lastInterval, setLastInterval] = useState<number | null>(null)
+  const [keyword, setKeyword] = useState('')
+
+  const filteredQueue = queue.filter((item) => {
+    const lower = keyword.toLowerCase()
+    const text = `${item.front}\n${item.back}\n${item.tags?.join(' ') ?? ''}`.toLowerCase()
+    return text.includes(lower)
+  })
 
   async function fetchQueue() {
     setLoading(true)
@@ -63,14 +70,37 @@ export default function Study() {
     fetchQueue()
   }, [deckId, includeSubdecks, managed.join(','), state.join(','), mastery.join(','), search])
 
+  useEffect(() => {
+    setCurrentIndex(0)
+    setShowBack(false)
+    setCompleted(false)
+  }, [keyword])
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (completed || filteredQueue.length === 0) return
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setCurrentIndex((i) => Math.max(0, i - 1))
+        setShowBack(false)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setCurrentIndex((i) => Math.min(filteredQueue.length - 1, i + 1))
+        setShowBack(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [completed, filteredQueue.length])
+
   async function handleRate(rating: Rating) {
-    const card = queue[currentIndex]
+    const card = filteredQueue[currentIndex]
     if (!card) return
     try {
       const res = await api.post<ReviewResponse>(`/study/${card.id}/review`, { rating })
       setLastInterval(res.interval_days)
       setShowBack(false)
-      if (currentIndex + 1 >= queue.length) {
+      if (currentIndex + 1 >= filteredQueue.length) {
         setCompleted(true)
       } else {
         setCurrentIndex((i) => i + 1)
@@ -107,21 +137,111 @@ export default function Study() {
     )
   }
 
-  const card = queue[currentIndex]
-  if (!card) return <div className="text-center py-12 text-slate-500">No cards available.</div>
+  const card = filteredQueue[currentIndex]
+  if (!card) {
+    const emptyByKeyword = queue.length > 0 && filteredQueue.length === 0
+    return (
+      <div className="max-w-xl mx-auto text-center py-16 bg-white rounded-xl border border-slate-200">
+        <p className="text-slate-600 mb-4">
+          {emptyByKeyword
+            ? 'No cards match your keyword.'
+            : 'No cards available.'}
+        </p>
+        {emptyByKeyword && (
+          <button
+            onClick={() => setKeyword('')}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+          >
+            Clear keyword
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <Link
-          to={deckId ? `/decks/${deckId}` : '/decks'}
-          className="flex items-center gap-1 text-sm text-slate-500 hover:text-indigo-600"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </Link>
-        <span className="text-sm text-slate-500">
-          Card {currentIndex + 1} of {queue.length}
-        </span>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-center justify-between">
+          <Link
+            to={deckId ? `/decks/${deckId}` : '/decks'}
+            className="flex items-center gap-1 text-sm text-slate-500 hover:text-indigo-600"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+              disabled={currentIndex === 0}
+              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed"
+              title="Previous"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="text-sm text-slate-600 min-w-[100px] text-center">
+              {currentIndex + 1} / {filteredQueue.length}
+            </span>
+            <button
+              onClick={() =>
+                setCurrentIndex((i) => Math.min(filteredQueue.length - 1, i + 1))
+              }
+              disabled={currentIndex >= filteredQueue.length - 1}
+              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed"
+              title="Next"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 p-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrentIndex(0)
+                setShowBack(false)
+              }}
+              placeholder="Search front / back / tags"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-slate-500">Go to</span>
+            <input
+              type="number"
+              min={1}
+              max={filteredQueue.length}
+              value={currentIndex + 1}
+              onChange={(e) => {
+                const value = parseInt(e.target.value, 10)
+                if (!isNaN(value)) {
+                  setCurrentIndex(Math.max(0, Math.min(filteredQueue.length - 1, value - 1)))
+                  setShowBack(false)
+                }
+              }}
+              className="w-16 px-2 py-2 text-sm text-center border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 whitespace-nowrap">Progress</span>
+          <input
+            type="range"
+            min={1}
+            max={filteredQueue.length}
+            value={currentIndex + 1}
+            onChange={(e) => {
+              setCurrentIndex(parseInt(e.target.value, 10) - 1)
+              setShowBack(false)
+            }}
+            className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          />
+        </div>
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
