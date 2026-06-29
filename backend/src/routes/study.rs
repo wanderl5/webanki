@@ -1,7 +1,7 @@
 use crate::{
     error::{AppError, AppResult},
     models::{Card, CardResponse, Deck, Rating, ReviewRequest, ReviewResponse, StudyQueueItem},
-    routes::auth::CurrentUser,
+    routes::{auth::CurrentUser, cards::load_card_links},
     state::AppState,
 };
 use axum::{
@@ -140,7 +140,7 @@ async fn study_queue(
     CurrentUser { id }: CurrentUser,
     Query(query): Query<QueueQuery>,
 ) -> AppResult<Json<Vec<StudyQueueItem>>> {
-    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let _limit = query.limit.unwrap_or(50).clamp(1, 500);
     let now = Utc::now().naive_utc();
 
     let include_subdecks = query
@@ -234,13 +234,17 @@ async fn study_queue(
         });
     }
 
+    let card_ids: Vec<String> = cards.iter().map(|c| c.id.clone()).collect();
+    let links = load_card_links(&state, &card_ids).await?;
+
     let mut items: Vec<StudyQueueItem> = cards
         .iter()
-        .take(limit as usize)
         .map(|card| {
             let retrievability = compute_retrievability(&state, card, now);
+            let mut resp = CardResponse::from(card);
+            resp.linked_card_ids = links.get(&resp.id).cloned().unwrap_or_default();
             StudyQueueItem {
-                card: CardResponse::from(card),
+                card: resp,
                 retrievability,
             }
         })

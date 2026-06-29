@@ -355,8 +355,8 @@ export default function Study() {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span
                   className="font-mono text-slate-400 cursor-pointer hover:text-indigo-600"
-                  title="Double-click to edit card"
-                  onDoubleClick={() => navigate(`/cards/${card.id}/edit`)}
+                  title="Double-click to view card"
+                  onDoubleClick={() => navigate(`/cards/${card.id}`)}
                 >
                   {card.id.slice(0, 8)}
                 </span>
