@@ -216,9 +216,9 @@ export default function DeckDetail() {
               const params = new URLSearchParams()
               params.set('deckId', deck.id)
               params.set('include_subdecks', 'true')
-              managedFilter.forEach((v) => params.append('managed', String(v)))
-              stateFilter.forEach((v) => params.append('state', v))
-              masteryFilter.forEach((v) => params.append('mastery', v))
+              if (managedFilter.length) params.set('managed', managedFilter.map(String).join(','))
+              if (stateFilter.length) params.set('state', stateFilter.join(','))
+              if (masteryFilter.length) params.set('mastery', masteryFilter.join(','))
               if (search.trim()) params.set('search', search.trim())
               return `/study?${params.toString()}`
             })()}

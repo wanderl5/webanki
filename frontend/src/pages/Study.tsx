@@ -42,9 +42,9 @@ export default function Study() {
         params.set('deck_id', deckId)
         params.set('include_subdecks', String(includeSubdecks))
       }
-      managed.forEach((v) => params.append('managed', v))
-      state.forEach((v) => params.append('state', v))
-      mastery.forEach((v) => params.append('mastery', v))
+      if (managed.length) params.set('managed', managed.join(','))
+      if (state.length) params.set('state', state.join(','))
+      if (mastery.length) params.set('mastery', mastery.join(','))
       if (search.trim()) params.set('search', search.trim())
       const query = params.toString() ? `?${params.toString()}` : ''
       const data = await api.get<StudyQueueItem[]>(`/study/queue${query}`)

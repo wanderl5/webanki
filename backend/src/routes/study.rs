@@ -28,13 +28,13 @@ struct QueueQuery {
     #[serde(default)]
     deck_id: Option<String>,
     #[serde(default)]
-    include_subdecks: bool,
+    include_subdecks: Option<String>,
     #[serde(default)]
-    state: Vec<String>,
+    state: Option<String>,
     #[serde(default)]
-    mastery: Vec<String>,
+    mastery: Option<String>,
     #[serde(default)]
-    managed: Vec<String>,
+    managed: Option<String>,
     #[serde(default)]
     search: Option<String>,
 }
@@ -143,8 +143,14 @@ async fn study_queue(
     let limit = query.limit.unwrap_or(50).clamp(1, 500);
     let now = Utc::now().naive_utc();
 
+    let include_subdecks = query
+        .include_subdecks
+        .as_deref()
+        .map(|s| s == "true")
+        .unwrap_or(false);
+
     let deck_ids: Option<Vec<String>> = if let Some(deck_id) = &query.deck_id {
-        if query.include_subdecks {
+        if include_subdecks {
             let decks = sqlx::query_as::<_, Deck>("SELECT * FROM decks WHERE user_id = ?")
                 .bind(&id)
                 .fetch_all(&state.pool)
@@ -189,21 +195,35 @@ async fn study_queue(
     // Apply filters in Rust
     let managed_values: Vec<bool> = query
         .managed
-        .iter()
-        .filter_map(|s| match s.as_str() {
-            "true" => Some(true),
-            "false" => Some(false),
-            _ => None,
+        .as_deref()
+        .map(|s| {
+            s.split(',')
+                .filter_map(|v| match v.trim() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default();
     if !managed_values.is_empty() {
         cards.retain(|c| managed_values.iter().any(|&m| m == c.managed));
     }
-    if !query.state.is_empty() {
-        cards.retain(|c| query.state.iter().any(|s| s == &c.state));
+    let state_values: Vec<String> = query
+        .state
+        .as_deref()
+        .map(|s| s.split(',').map(|v| v.trim().to_string()).collect())
+        .unwrap_or_default();
+    if !state_values.is_empty() {
+        cards.retain(|c| state_values.iter().any(|s| s == &c.state));
     }
-    if !query.mastery.is_empty() {
-        cards.retain(|c| query.mastery.iter().any(|m| m == mastery_level(c)));
+    let mastery_values: Vec<String> = query
+        .mastery
+        .as_deref()
+        .map(|s| s.split(',').map(|v| v.trim().to_string()).collect())
+        .unwrap_or_default();
+    if !mastery_values.is_empty() {
+        cards.retain(|c| mastery_values.iter().any(|m| m == mastery_level(c)));
     }
     if let Some(search) = query.search {
         let lower = search.to_lowercase();
