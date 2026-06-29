@@ -5,9 +5,9 @@ import MarkdownRenderer from './MarkdownRenderer'
 
 function convertPlainFractions(text: string): string {
   // Convert mixed numbers: N a/b -> $N\frac{a}{b}$
-  text = text.replace(/(\d+)\s+(\d+)\/(\d+)(?![\d\/])/g, '$1\\\\frac{$2}{$3}')
+  text = text.replace(/(\d+)\s+(\d+)\/(\d+)(?![\d\/])/g, '$1\\frac{$2}{$3}')
   // Convert simple fractions: a/b -> $\frac{a}{b}$
-  text = text.replace(/(\d+)\/(\d+)(?![\d\/])/g, '\\\\frac{$1}{$2}')
+  text = text.replace(/(\d+)\/(\d+)(?![\d\/])/g, '\\frac{$1}{$2}')
   return text
 }
 
@@ -83,7 +83,7 @@ export default function MarkdownEditor({
   }
 
   function insertFraction() {
-    insertAtCursor('$\\\\frac{a}{b}$')
+    insertAtCursor('$\\frac{a}{b}$')
   }
 
   function convertFractions() {
