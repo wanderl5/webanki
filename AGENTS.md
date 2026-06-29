@@ -109,24 +109,7 @@ uvicorn main:app --reload --port 8001
 | `LLM_MODEL` | 模型名称 |
 | `LLM_BASE_URL` | 自定义 API Base URL |
 
-### 4.2 Docker Compose（推荐生产部署）
-
-```bash
-docker-compose up --build
-```
-
-服务映射：
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3000`
-- AI Service: `http://localhost:8001`
-
-**持久化**：
-
-- `./data` → backend SQLite
-- `./media` → backend 上传文件
-
-### 4.3 远程访问开发前端
+### 4.2 远程访问开发前端
 
 Vite 开发服务器默认只监听 `127.0.0.1`，远程无法访问。需要显式指定 host：
 
@@ -135,7 +118,7 @@ cd frontend
 npm run dev -- --host 0.0.0.0
 ```
 
-### 4.4 媒体文件服务
+### 4.3 媒体文件服务
 
 - 上传接口：`POST /api/media/upload`
 - 上传成功后返回 URL 形如 `/uploads/<uuid>.png`
@@ -198,7 +181,7 @@ uvicorn main:app --reload --port 8001
 
 1. **密码安全**：用户密码使用 bcrypt 哈希存储，**没有明文密码**，无法帮助用户“核对”或“找回”原密码。
 2. **AI Service 依赖**：`apkg 导出` 与部分导入功能需要 AI Service 运行，否则后端会返回 500。
-3. **后台任务**：直接通过工具启动的 `cargo run` / `npm run dev` 在会话结束时可能被清理；生产环境建议使用 `tmux`、`systemd` 或 Docker。
+3. **后台任务**：直接通过工具启动的 `cargo run` / `npm run dev` 在会话结束时可能被清理；生产环境建议使用 `tmux` 或 `systemd`。
 4. **Lint 配置**：当前 ESLint 默认会扫描 `.venv-browser/` 等目录，建议后续在 `eslint.config.js` 中显式忽略。
 
 ## 8. 修改后应更新的文档

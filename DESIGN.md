@@ -22,7 +22,7 @@
 | 算法 | Rust 实现 FSRS-5 | 官方 Rust 实现 `fsrs-rs` 可直接集成 |
 | Python 服务 | Python 3.12 + FastAPI + Celery/RQ | 生态丰富，适合 NLP、文档解析、LLM 调用 |
 | AI 兜底 | OpenAI / Claude / 本地模型 API | 通过统一接口封装，便于切换 |
-| 部署 | Docker Compose / 单二进制文件 | 低运维成本，也可容器化 |
+| 部署 | 直接运行 / 单二进制文件 | 低运维成本 |
 
 ## 3. 系统架构
 
